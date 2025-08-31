@@ -48,5 +48,5 @@ Thumbs.db
 # config_local.json
 # secrets.json
 
-# Claude Code workspace (keep this)
-!.claude/
+# Claude Code workspace
+.claude/
