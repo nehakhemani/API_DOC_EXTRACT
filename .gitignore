@@ -1,0 +1,52 @@
+# Data files - exclude CSV input files
+*.csv
+
+# Downloaded files - exclude download directories
+downloaded_pdfs/
+downloads/
+custom_downloads/
+example_downloads/
+
+# Log files - exclude generated logs
+logs/*
+*.log
+*.txt
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+
+# Sensitive configuration (if needed)
+# config_local.json
+# secrets.json
+
+# Claude Code workspace (keep this)
+!.claude/

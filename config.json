@@ -1,0 +1,39 @@
+{
+  "autotask_api": {
+    "base_url": "https://webservices6.autotask.net/atservicesrest/v1.0/CompanyAttachments/",
+    "headers": {
+      "ApiIntegrationcode": "CJNGT6NWEZ34KHTYZLLECDWORAD",
+      "UserName": "CCL.ERP@CONCEPTS.CO.NZ",
+      "Secret": "mG#57fN~R1@ixC4$Z*a8y9~EL",
+      "Content-Type": "application/json"
+    },
+    "settings": {
+      "download_folder": "downloaded_pdfs",
+      "log_folder": "logs",
+      "max_workers": 5,
+      "delay_between_batches": 1.0,
+      "batch_size": 20,
+      "request_timeout": 30,
+      "retry_on_failure": true,
+      "max_retries": 3
+    }
+  },
+  "example_api": {
+    "base_url": "https://api.example.com/files/",
+    "headers": {
+      "Authorization": "Bearer YOUR_API_TOKEN_HERE",
+      "Content-Type": "application/json",
+      "User-Agent": "ConcurrentDownloader/1.0"
+    },
+    "settings": {
+      "download_folder": "example_downloads",
+      "log_folder": "example_logs",
+      "max_workers": 3,
+      "delay_between_batches": 2.0,
+      "batch_size": 15,
+      "request_timeout": 45,
+      "retry_on_failure": true,
+      "max_retries": 2
+    }
+  }
+}
