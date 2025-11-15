@@ -15,7 +15,10 @@ example_downloads/
 # Log files - exclude generated logs
 logs/*
 *.log
+
+# Exclude data txt files but keep requirements.txt
 *.txt
+!requirements.txt
 
 # Python cache
 __pycache__/
