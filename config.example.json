@@ -1,0 +1,26 @@
+{
+  "api": {
+    "base_url": "https://api.example.com",
+    "list_endpoint": "https://api.example.com/files",
+    "download_endpoint": "https://api.example.com/files/{id}",
+    "timeout": 30,
+    "id_field": "id",
+    "content_field": "base64Content",
+    "filename_field": "fileName",
+    "data_path": "data.items"
+  },
+  "authentication": {
+    "type": "bearer",
+    "token": "your_api_token_here",
+    "headers": {
+      "Content-Type": "application/json"
+    }
+  },
+  "output": {
+    "directory": "downloads"
+  },
+  "logging": {
+    "enabled": true,
+    "level": "INFO"
+  }
+}

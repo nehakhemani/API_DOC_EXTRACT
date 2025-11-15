@@ -1,11 +1,16 @@
+# Configuration with sensitive data
+config.json
+
 # Data files - exclude CSV input files
 *.csv
 
-# Downloaded files - exclude download directories
+# Downloaded files - exclude download directories and PDFs
 downloaded_pdfs/
 downloads/
 custom_downloads/
 example_downloads/
+*.pdf
+*.PDF
 
 # Log files - exclude generated logs
 logs/*

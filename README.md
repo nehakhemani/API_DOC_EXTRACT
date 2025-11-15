@@ -1,269 +1,310 @@
-# Concurrent Base64 Downloader
+# API File Downloader with Base64 to PDF Conversion
 
-A powerful, reusable Python tool for concurrent downloading and decoding of Base64-encoded files from REST APIs.
+A clean, generic implementation for downloading files from REST APIs and converting base64-encoded content to PDF files.
 
 ## Features
 
-- **Concurrent Downloads**: Multi-threaded downloading with configurable thread pools
-- **Base64 Decoding**: Automatic decoding and file saving
-- **Resume Capability**: Skip already downloaded files automatically
-- **Comprehensive Logging**: Detailed logs with error categorization
-- **Flexible Input**: Support for CSV files or direct ID lists
-- **Error Handling**: Robust error handling with retry logic
-- **Rate Limiting**: Built-in delays and batch processing to respect API limits
-- **Configurable**: Easy configuration via JSON files or code
+- **Generic & Reusable**: Configuration-driven design works with any REST API
+- **Concurrent Downloads**: Multi-threaded downloading with configurable workers
+- **Base64 to PDF Conversion**: Automatic decoding and file saving
+- **Flexible Authentication**: Supports Bearer tokens, Basic auth, and custom headers
+- **Comprehensive Logging**: Detailed logs with timestamps and error tracking
+- **Robust Error Handling**: Retry logic and graceful failure handling
+- **Command Line Interface**: Easy-to-use CLI with argument parsing
 
 ## Quick Start
 
-### 1. Setup Configuration
-
-Create a `config.json` file with your API settings:
-
-```json
-{
-  "your_api": {
-    "base_url": "https://api.example.com/files/",
-    "headers": {
-      "Authorization": "Bearer YOUR_TOKEN",
-      "Content-Type": "application/json"
-    },
-    "settings": {
-      "download_folder": "downloads",
-      "log_folder": "logs",
-      "max_workers": 5,
-      "delay_between_batches": 1.0,
-      "batch_size": 20,
-      "request_timeout": 30
-    }
-  }
-}
-```
-
-### 2. Basic Usage
-
-```python
-from concurrent_base64_downloader import ConcurrentBase64Downloader, DownloadConfig
-import json
-
-# Load configuration
-with open('config.json', 'r') as f:
-    config_data = json.load(f)
-
-api_config = config_data['your_api']
-config = DownloadConfig(
-    base_url=api_config['base_url'],
-    headers=api_config['headers'],
-    **api_config['settings']
-)
-
-# Create downloader
-downloader = ConcurrentBase64Downloader(config)
-
-# Download from CSV
-results = downloader.download_from_csv(
-    csv_file='your_file.csv',
-    id_column='ID_COLUMN',
-    resume=True
-)
-
-print(f"Downloaded {results['successful']} files with {results['success_rate']:.1f}% success rate")
-```
-
-## Usage Examples
-
-### Download from CSV File
-
-```python
-# Download all files from CSV
-results = downloader.download_from_csv(
-    csv_file='data.csv',
-    id_column='ATTACHMENT_ID',
-    resume=True  # Skip already downloaded
-)
-
-# Resume from specific line
-results = downloader.download_from_csv(
-    csv_file='data.csv',
-    id_column='ATTACHMENT_ID',
-    start_line=1000,
-    resume=True
-)
-```
-
-### Download Specific IDs
-
-```python
-# Download specific files
-id_list = ["123", "456", "789"]
-results = downloader.download_from_list(
-    id_list=id_list,
-    source_description="Missing Files",
-    resume=True
-)
-```
-
-### Custom Configuration
-
-```python
-# Create custom configuration in code
-custom_config = DownloadConfig(
-    base_url="https://api.custom.com/files/",
-    headers={"Authorization": "Bearer token"},
-    download_folder="custom_downloads",
-    max_workers=10,
-    batch_size=50
-)
-
-downloader = ConcurrentBase64Downloader(custom_config)
-```
-
-## Configuration Options
-
-### DownloadConfig Parameters
-
-- `base_url`: API endpoint URL (without the ID parameter)
-- `headers`: HTTP headers dict (authentication, content-type, etc.)
-- `download_folder`: Where to save downloaded files (default: "downloads")
-- `log_folder`: Where to save log files (default: "logs")
-- `max_workers`: Number of concurrent threads (default: 5)
-- `delay_between_batches`: Seconds to wait between batches (default: 1.0)
-- `batch_size`: Number of files per batch (default: 20)
-- `request_timeout`: HTTP request timeout in seconds (default: 30)
-- `retry_on_failure`: Whether to retry failed requests (default: True)
-- `max_retries`: Maximum number of retries (default: 3)
-
-## Performance Tuning
-
-### High Performance
-```python
-config.max_workers = 10
-config.batch_size = 50
-config.delay_between_batches = 0.5
-```
-
-### Conservative (API-friendly)
-```python
-config.max_workers = 1
-config.batch_size = 5
-config.delay_between_batches = 5.0
-```
-
-## Output Files
-
-The downloader creates several output files:
-
-### Downloaded Files
-- Saved in `download_folder` with format: `{id}_{filename}`
-- Base64 content is automatically decoded to binary
-
-### Log Files
-- `download_log_HHMMSS.txt`: Human-readable progress log
-- `download_detailed_HHMMSS.csv`: Machine-readable detailed results
-
-### Log Columns (CSV)
-- `ATTACHMENT_ID`: The file ID
-- `STATUS`: SUCCESS or FAILED
-- `ERROR_TYPE`: Category of error (if failed)
-- `MESSAGE`: Detailed message
-- `TIMESTAMP`: When the download was attempted
-
-## Error Types
-
-The downloader categorizes errors for analysis:
-
-- `SUCCESS`: File downloaded successfully
-- `ALREADY_EXISTS`: File was already downloaded
-- `NO_DATA`: API returned no data
-- `NO_BASE64`: Response contained no Base64 content
-- `NOT_FOUND`: HTTP 404 - File not found
-- `SERVER_ERROR`: HTTP 500 - Server error
-- `AUTH_ERROR`: HTTP 401 - Authentication failed
-- `FORBIDDEN`: HTTP 403 - Access denied
-- `RATE_LIMITED`: HTTP 429 - Too many requests
-- `TIMEOUT`: Request timed out
-- `CONNECTION_ERROR`: Network connection failed
-- `DECODE_ERROR`: Base64 decoding failed
-- `UNKNOWN_ERROR`: Unexpected error
-
-## API Requirements
-
-Your API should:
-
-1. Accept GET requests to `{base_url}{id}`
-2. Return JSON response with structure:
-   ```json
-   {
-     "items": [
-       {
-         "data": "base64_encoded_content_here",
-         "fullPath": "filename.pdf",
-         "fileName": "filename.pdf"  // alternative to fullPath
-       }
-     ]
-   }
-   ```
-
-## Resume Functionality
-
-The downloader automatically detects already downloaded files by:
-1. Scanning the download folder for files matching pattern `{id}_*`
-2. Extracting the ID from the filename
-3. Skipping those IDs during download
-
-This allows you to safely resume interrupted downloads.
-
-## Best Practices
-
-1. **Start Conservative**: Begin with low `max_workers` and `batch_size`
-2. **Monitor Logs**: Check error types to understand API behavior
-3. **Use Resume**: Always enable resume functionality
-4. **Respect Rate Limits**: Adjust delays based on API requirements
-5. **Test First**: Try with a small subset before bulk downloads
-
-## Example Scripts
-
-See `example_usage.py` for comprehensive examples including:
-- Basic CSV download
-- Resume from specific line
-- Retry missing files
-- Custom API configurations
-- Performance optimization
-- Error analysis
-
-## Troubleshooting
-
-### Common Issues
-
-**High Failure Rate**
-- Increase `delay_between_batches`
-- Reduce `max_workers` and `batch_size`
-- Check API rate limits
-
-**Slow Downloads**
-- Increase `max_workers` (if API allows)
-- Reduce `delay_between_batches`
-- Increase `batch_size`
-
-**Authentication Errors**
-- Verify headers in config
-- Check token expiration
-- Confirm API permissions
-
-**Files Not Downloading**
-- Check `base_url` format
-- Verify API response structure
-- Review error types in logs
-
-## Requirements
-
-- Python 3.7+
-- `requests` library
-- Standard library modules: `csv`, `json`, `os`, `time`, `datetime`, `concurrent.futures`, `threading`, `base64`
-
-## Installation
+### 1. Install Dependencies
 
 ```bash
 pip install requests
 ```
 
-Then simply copy the `concurrent_base64_downloader.py` file to your project.
+### 2. Create Configuration File
+
+Copy `config.example.json` to `config.json` and update with your API details:
+
+```json
+{
+  "api": {
+    "base_url": "https://api.example.com",
+    "list_endpoint": "https://api.example.com/files",
+    "download_endpoint": "https://api.example.com/files/{id}",
+    "timeout": 30,
+    "id_field": "id",
+    "content_field": "base64Content",
+    "filename_field": "fileName",
+    "data_path": "data.items"
+  },
+  "authentication": {
+    "type": "bearer",
+    "token": "your_api_token_here",
+    "headers": {
+      "Content-Type": "application/json"
+    }
+  },
+  "output": {
+    "directory": "downloads"
+  },
+  "logging": {
+    "enabled": true,
+    "level": "INFO"
+  }
+}
+```
+
+### 3. Run the Downloader
+
+```bash
+# Download all files
+python api_downloader.py
+
+# Download with custom config
+python api_downloader.py --config my_config.json
+
+# Download with more workers
+python api_downloader.py --workers 10
+
+# Download specific files by ID
+python api_downloader.py --ids 123 456 789
+```
+
+## Configuration Guide
+
+### API Configuration
+
+- **base_url**: Base URL of your API
+- **list_endpoint**: Endpoint to fetch list of available files (optional)
+- **download_endpoint**: Endpoint template for downloading files (use `{id}` placeholder)
+- **timeout**: Request timeout in seconds (default: 30)
+- **id_field**: JSON field name containing file ID (default: "id")
+- **content_field**: JSON field name containing base64 content (default: "content")
+- **filename_field**: JSON field name containing filename (default: "filename")
+- **data_path**: Dot-notation path to extract file list from nested JSON (e.g., "data.items")
+
+### Authentication Types
+
+**Bearer Token:**
+```json
+{
+  "authentication": {
+    "type": "bearer",
+    "token": "your_token_here"
+  }
+}
+```
+
+**Basic Authentication:**
+```json
+{
+  "authentication": {
+    "type": "basic",
+    "username": "your_username",
+    "password": "your_password"
+  }
+}
+```
+
+**Custom Headers Only:**
+```json
+{
+  "authentication": {
+    "headers": {
+      "X-API-Key": "your_api_key",
+      "Custom-Header": "value"
+    }
+  }
+}
+```
+
+### Output Configuration
+
+- **directory**: Directory where downloaded PDFs will be saved (default: "downloads")
+
+### Logging Configuration
+
+- **enabled**: Enable/disable file logging (default: true)
+- **level**: Logging level - DEBUG, INFO, WARNING, ERROR (default: "INFO")
+
+## Usage Examples
+
+### Python API Usage
+
+```python
+from api_downloader import APIDownloader
+
+# Initialize with config
+downloader = APIDownloader('config.json')
+
+# Download all files
+summary = downloader.download_all(max_workers=5)
+print(f"Downloaded {summary['successful']}/{summary['total']} files")
+
+# Download specific files
+file_ids = ['123', '456', '789']
+summary = downloader.download_by_ids(file_ids, max_workers=3)
+
+# Download single file
+file_path = downloader.download_file('123')
+if file_path:
+    print(f"File saved to: {file_path}")
+```
+
+### Command Line Usage
+
+```bash
+# Basic download all
+python api_downloader.py
+
+# Custom configuration
+python api_downloader.py --config production_config.json
+
+# Increase concurrency
+python api_downloader.py --workers 20
+
+# Download specific files
+python api_downloader.py --ids 110581 111125 111749
+
+# Combine options
+python api_downloader.py --config prod.json --workers 10 --ids 123 456
+```
+
+## API Response Format
+
+The downloader expects your API to return JSON responses in this format:
+
+**For list endpoint:**
+```json
+{
+  "data": {
+    "items": [
+      {
+        "id": "123",
+        "fileName": "document.pdf"
+      }
+    ]
+  }
+}
+```
+
+**For download endpoint:**
+```json
+{
+  "id": "123",
+  "fileName": "document.pdf",
+  "base64Content": "JVBERi0xLjQKJeLjz9MKMSAwIG9iago8PC..."
+}
+```
+
+Adjust the `data_path`, `id_field`, `content_field`, and `filename_field` in your config to match your API's structure.
+
+## Features in Detail
+
+### Automatic File Naming
+
+- Uses filename from API metadata
+- Automatically adds `.pdf` extension if missing
+- Sanitizes filenames (removes invalid characters)
+- Handles duplicate filenames by appending file ID
+
+### Error Handling
+
+- Connection errors with detailed logging
+- HTTP errors (404, 401, 500, etc.)
+- Base64 decoding errors
+- Timeout handling
+- Missing content warnings
+
+### Concurrent Processing
+
+- ThreadPoolExecutor for parallel downloads
+- Configurable number of workers
+- Progress tracking for each file
+- Graceful handling of failures in concurrent execution
+
+### Logging
+
+All operations are logged with:
+- Timestamps
+- Log levels (INFO, WARNING, ERROR)
+- Detailed error messages
+- File-based logs (when enabled)
+- Console output for real-time monitoring
+
+Log files are saved in `logs/download_YYYYMMDD_HHMMSS.log`
+
+## Performance Tuning
+
+### High Performance (Fast API)
+```bash
+python api_downloader.py --workers 20
+```
+
+### Conservative (Rate-Limited API)
+```bash
+python api_downloader.py --workers 1
+```
+
+Update timeout in config for slow APIs:
+```json
+{
+  "api": {
+    "timeout": 60
+  }
+}
+```
+
+## Troubleshooting
+
+### Authentication Failures
+- Verify your token/credentials in config
+- Check token hasn't expired
+- Ensure correct authentication type
+- Verify custom headers if used
+
+### No Files Downloaded
+- Check `list_endpoint` is correct
+- Verify `data_path` matches your API structure
+- Review logs for API errors
+- Test API endpoints manually with curl/Postman
+
+### Base64 Decode Errors
+- Verify `content_field` matches your API response
+- Check that content is valid base64
+- Ensure API returns complete content
+
+### Timeout Errors
+- Increase timeout in config
+- Reduce number of workers
+- Check network connectivity
+- Verify API is responsive
+
+## Requirements
+
+- Python 3.7+
+- requests library
+
+Install with:
+```bash
+pip install requests
+```
+
+## File Structure
+
+```
+PDF_CCL/
+├── api_downloader.py          # Main downloader class
+├── config.json                # Your configuration (create from example)
+├── config.example.json        # Configuration template
+├── README.md                  # This file
+├── downloads/                 # Downloaded PDFs (created automatically)
+└── logs/                      # Log files (created automatically)
+```
+
+## License
+
+This is a generic implementation designed to be adapted for your specific API needs.
+
+## Contributing
+
+This is a standalone tool. Modify the code to fit your specific requirements.
