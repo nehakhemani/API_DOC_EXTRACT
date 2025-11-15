@@ -46,6 +46,13 @@ class DocumentValidator:
         r'signature\s+date'
     ]
 
+    # Signature role indicators (person with title/role and date suggests signature)
+    SIGNATURE_ROLE_PATTERNS = [
+        r'(?:client\s+lead|director|manager|president|ceo|cfo|authorized|signatory)',
+        r'(?:vice\s+president|vp|secretary|treasurer|partner)',
+        r'(?:representative|agent|officer|executive)',
+    ]
+
     # Date patterns (various formats)
     DATE_PATTERNS = [
         r'\b(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})\b',  # MM/DD/YYYY or DD/MM/YYYY
@@ -155,14 +162,38 @@ class DocumentValidator:
         text_lower = text.lower()
         found_indicators = []
 
+        # Check for explicit signature keywords
         for pattern in self.SIGNATURE_KEYWORDS:
             matches = re.finditer(pattern, text_lower, re.IGNORECASE)
             for match in matches:
                 found_indicators.append(match.group())
 
+        # Check for signature roles (Client Lead, Director, etc.) near dates
+        # This indicates a signature block even without the word "signature"
+        role_found = False
+        for pattern in self.SIGNATURE_ROLE_PATTERNS:
+            if re.search(pattern, text_lower, re.IGNORECASE):
+                role_found = True
+                found_indicators.append(f"role: {pattern.split('|')[0].replace('(?:', '').strip()}")
+                break
+
+        # If we find a role/title AND a date, it's likely a signature block
+        dates = self.extract_dates(text)
+        has_date = len(dates) > 0
+
         # Determine confidence level
         indicator_count = len(found_indicators)
-        if indicator_count >= 3:
+
+        # Role + Date is a strong indicator of signature even without "signature" keyword
+        if role_found and has_date:
+            if indicator_count >= 1:
+                confidence = "high"
+                is_signed = True
+            else:
+                confidence = "medium"
+                is_signed = True
+                found_indicators.append("role with date (signature block detected)")
+        elif indicator_count >= 3:
             confidence = "high"
             is_signed = True
         elif indicator_count >= 1:
