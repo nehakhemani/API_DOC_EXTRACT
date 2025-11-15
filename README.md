@@ -1,23 +1,40 @@
-# API File Downloader with Base64 to PDF Conversion
+# API File Downloader & Document Validator
 
-A clean, generic implementation for downloading files from REST APIs and converting base64-encoded content to PDF files.
+A comprehensive toolkit for downloading files from REST APIs, converting base64 to PDF, and validating document content.
 
 ## Features
 
+### API Downloader
 - **Generic & Reusable**: Configuration-driven design works with any REST API
 - **Concurrent Downloads**: Multi-threaded downloading with configurable workers
 - **Base64 to PDF Conversion**: Automatic decoding and file saving
 - **Flexible Authentication**: Supports Bearer tokens, Basic auth, and custom headers
 - **Comprehensive Logging**: Detailed logs with timestamps and error tracking
 - **Robust Error Handling**: Retry logic and graceful failure handling
-- **Command Line Interface**: Easy-to-use CLI with argument parsing
+
+### Document Validator
+- **Signature Detection**: Identifies if documents are signed based on keywords and patterns
+- **Date Extraction**: Finds and extracts signing dates from documents
+- **Customer Name Extraction**: Identifies customer/client names from filenames and content
+- **Agreement Type Detection**: Classifies documents by agreement type (Business, NDA, License, etc.)
+- **Batch Processing**: Validate entire directories of PDFs at once
+- **JSON Export**: Save validation results to structured JSON files
 
 ## Quick Start
 
 ### 1. Install Dependencies
 
 ```bash
+pip install -r requirements.txt
+```
+
+Or install individually:
+```bash
+# For API downloader
 pip install requests
+
+# For document validator
+pip install PyPDF2 pdfplumber
 ```
 
 ### 2. Create Configuration File
@@ -254,6 +271,147 @@ Update timeout in config for slow APIs:
 }
 ```
 
+## Document Validator
+
+The Document Validator analyzes PDF files to extract key information and validate document properties.
+
+### Features
+
+The validator can extract:
+1. **Signature Status**: Detects if document is signed (based on keywords like "signature", "signed by", "electronically signed")
+2. **Signing Date**: Extracts the date when document was signed
+3. **Customer Name**: Identifies customer/client name from filename or document content
+4. **Agreement Type**: Classifies the document (Business Agreement, NDA, License Agreement, etc.)
+
+### Usage Examples
+
+**Validate a single PDF:**
+```bash
+python document_validator.py "path/to/document.pdf"
+```
+
+**Validate an entire directory:**
+```bash
+python document_validator.py downloads/
+```
+
+**Save results to JSON:**
+```bash
+# Single file
+python document_validator.py "document.pdf" --output results.json
+
+# Directory
+python document_validator.py downloads/ --output validation_results.json
+```
+
+**Adjust logging level:**
+```bash
+python document_validator.py "document.pdf" --log-level DEBUG
+```
+
+### Example Output
+
+```
+============================================================
+Document: 46367_FIDELITY LIFE ASSURANCE CO LTD_General Business Agreement.pdf
+============================================================
+
+Agreement Type: Business Agreement (medium confidence)
+Customer Name: Fidelity Life Assurance Co Ltd
+Signed: No (low confidence)
+Signing Date: 10/07/2024
+
+Dates Found: 10/07/2024
+
+============================================================
+```
+
+### Programmatic Usage
+
+```python
+from document_validator import DocumentValidator
+
+# Initialize validator
+validator = DocumentValidator(log_level="INFO")
+
+# Validate single document
+result = validator.validate_document("path/to/document.pdf")
+
+# Access extracted information
+print(f"Agreement Type: {result['agreement_type']['type']}")
+print(f"Customer: {result['customer_name']}")
+print(f"Is Signed: {result['signature']['is_signed']}")
+print(f"Signing Date: {result['signing_date']}")
+
+# Validate entire directory
+results = validator.validate_directory("downloads/", output_file="results.json")
+
+# Process results
+for doc in results:
+    if doc['signature']['is_signed']:
+        print(f"{doc['filename']} is signed on {doc['signing_date']}")
+```
+
+### JSON Output Format
+
+```json
+{
+  "filename": "document.pdf",
+  "file_path": "/path/to/document.pdf",
+  "status": "success",
+  "signature": {
+    "is_signed": true,
+    "confidence": "high",
+    "indicators_found": 3,
+    "signature_indicators": ["signature", "signed by", "date signed"]
+  },
+  "signing_date": "10/07/2024",
+  "customer_name": "ACME Corporation",
+  "agreement_type": {
+    "type": "Business Agreement",
+    "confidence": "high"
+  },
+  "extracted_dates": ["10/07/2024", "15/08/2024"],
+  "text_length": 12458,
+  "analyzed_at": "2025-11-16T12:30:45"
+}
+```
+
+### Supported Agreement Types
+
+The validator can detect these agreement types:
+- Business Agreement
+- Service Agreement
+- License Agreement
+- Non-Disclosure Agreement (NDA)
+- Sales Agreement
+- Employment Agreement
+- Partnership Agreement
+- Lease Agreement
+- Master Agreement (MSA)
+
+### How It Works
+
+1. **Text Extraction**: Uses pdfplumber (preferred) or PyPDF2 to extract text from PDF
+2. **Pattern Matching**: Applies regex patterns to identify signatures, dates, and agreement types
+3. **Filename Parsing**: Extracts customer names from structured filenames (e.g., `ID_CUSTOMERNAME_Type.pdf`)
+4. **Confidence Scoring**: Assigns confidence levels based on number of matches found
+5. **Results Compilation**: Combines all extracted data into structured output
+
+### Filename Convention
+
+For best results, use this filename pattern:
+```
+{ID}_{CUSTOMER_NAME}_{AGREEMENT_TYPE}.pdf
+```
+
+Example: `46367_FIDELITY LIFE ASSURANCE CO LTD_General Business Agreement.pdf`
+
+The validator will extract:
+- ID: 46367
+- Customer: FIDELITY LIFE ASSURANCE CO LTD
+- Type: General Business Agreement
+
 ## Troubleshooting
 
 ### Authentication Failures
@@ -282,20 +440,24 @@ Update timeout in config for slow APIs:
 ## Requirements
 
 - Python 3.7+
-- requests library
+- requests (for API downloader)
+- PyPDF2 (for document validator)
+- pdfplumber (for document validator)
 
-Install with:
+Install all dependencies:
 ```bash
-pip install requests
+pip install -r requirements.txt
 ```
 
 ## File Structure
 
 ```
 PDF_CCL/
-├── api_downloader.py          # Main downloader class
+├── api_downloader.py          # API file downloader
+├── document_validator.py      # PDF document validator
 ├── config.json                # Your configuration (create from example)
 ├── config.example.json        # Configuration template
+├── requirements.txt           # Python dependencies
 ├── README.md                  # This file
 ├── downloads/                 # Downloaded PDFs (created automatically)
 └── logs/                      # Log files (created automatically)

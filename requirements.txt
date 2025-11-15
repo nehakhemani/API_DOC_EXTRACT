@@ -1,1 +1,6 @@
+# API downloader dependencies
 requests>=2.25.0
+
+# Document validation dependencies
+PyPDF2>=3.0.0
+pdfplumber>=0.9.0
