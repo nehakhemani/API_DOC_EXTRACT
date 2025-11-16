@@ -324,7 +324,7 @@ Document: 46367_FIDELITY LIFE ASSURANCE CO LTD_General Business Agreement.pdf
 ============================================================
 
 Agreement Type: Business Agreement (medium confidence)
-Customer Name: Fidelity Life Assurance Co Ltd
+Customer Name: Company Life Assurance Co Ltd
 Signed: No (low confidence)
 Signing Date: 10/07/2024
 
@@ -373,7 +373,7 @@ for doc in results:
     "signature_indicators": ["signature", "signed by", "date signed"]
   },
   "signing_date": "10/07/2024",
-  "customer_name": "ACME Corporation",
+  "customer_name": "Customer Corporation",
   "agreement_type": {
     "type": "Business Agreement",
     "confidence": "high"
