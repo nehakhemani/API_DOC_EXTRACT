@@ -1,0 +1,8 @@
+{
+  "input_folder": "input",
+  "output_folder": "output",
+  "output_formats": ["json", "csv"],
+  "log_level": "INFO",
+  "process_subdirectories": false,
+  "file_patterns": ["*.pdf", "*.PDF"]
+}

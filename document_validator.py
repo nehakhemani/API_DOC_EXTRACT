@@ -28,6 +28,19 @@ try:
 except ImportError:
     PDFPLUMBER_AVAILABLE = False
 
+try:
+    from pdf2image import convert_from_path
+    PDF2IMAGE_AVAILABLE = True
+except ImportError:
+    PDF2IMAGE_AVAILABLE = False
+
+try:
+    import pytesseract
+    from PIL import Image
+    PYTESSERACT_AVAILABLE = True
+except ImportError:
+    PYTESSERACT_AVAILABLE = False
+
 
 class DocumentValidator:
     """Validates and extracts information from PDF documents."""
@@ -53,6 +66,25 @@ class DocumentValidator:
         r'(?:representative|agent|officer|executive)',
     ]
 
+    # Customer-side signature indicators
+    CUSTOMER_ROLE_PATTERNS = [
+        r'client\s+lead',
+        r'customer\s+(?:representative|signatory|authorized)',
+        r'buyer',
+        r'purchaser',
+        r'on\s+behalf\s+of\s+(?:client|customer)',
+    ]
+
+    # Spark NZ signature indicators
+    SPARK_NZ_PATTERNS = [
+        r'spark\s+(?:nz|new\s+zealand)',
+        r'on\s+behalf\s+of\s+spark',
+        r'for\s+and\s+on\s+behalf\s+of\s+spark',
+        r'spark.*(?:representative|signatory|authorized)',
+        r'account\s+(?:manager|executive)',
+        r'sales\s+(?:manager|director|representative)',
+    ]
+
     # Date patterns (various formats)
     DATE_PATTERNS = [
         r'\b(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})\b',  # MM/DD/YYYY or DD/MM/YYYY
@@ -61,17 +93,18 @@ class DocumentValidator:
         r'\b(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{4})\b',  # DD Month YYYY
     ]
 
-    # Agreement type patterns
+    # Agreement type patterns (order matters - more specific patterns first)
     AGREEMENT_TYPES = {
-        'service_agreement': [r'service\s+agreement', r'service\s+contract'],
-        'business_agreement': [r'business\s+agreement', r'general\s+business\s+agreement'],
-        'license_agreement': [r'license\s+agreement', r'licensing\s+agreement'],
-        'nda': [r'non[-\s]?disclosure\s+agreement', r'confidentiality\s+agreement', r'NDA'],
-        'sales_agreement': [r'sales\s+agreement', r'purchase\s+agreement'],
-        'employment_agreement': [r'employment\s+agreement', r'employment\s+contract'],
-        'partnership_agreement': [r'partnership\s+agreement'],
-        'lease_agreement': [r'lease\s+agreement', r'rental\s+agreement'],
-        'master_agreement': [r'master\s+agreement', r'master\s+service\s+agreement', r'MSA'],
+        'Variation': [r'agreement\s+variation', r'variation\s+to.*agreement', r'variation\s+number', r'variation\s+n[o°]?\.?:', r'variation\s+agreement'],
+        'Statement of Work': [r'statement\s+of\s+work', r'SOW\b', r'work\s+statement'],
+        'Letter of Engagement': [r'letter\s+of\s+engagement', r'engagement\s+letter'],
+        'Service Schedule': [r'service\s+schedule', r'schedule\s+of\s+services'],
+        'General Business Agreement': [r'general\s+business\s+agreement', r'business\s+agreement'],
+        'Service Agreement': [r'service\s+agreement', r'service\s+contract'],
+        'License Agreement': [r'license\s+agreement', r'licensing\s+agreement'],
+        'NDA': [r'non[-\s]?disclosure\s+agreement', r'confidentiality\s+agreement'],
+        'Sales Agreement': [r'sales\s+agreement', r'purchase\s+agreement'],
+        'Master Agreement': [r'master\s+agreement', r'master\s+service\s+agreement', r'MSA'],
     }
 
     def __init__(self, log_level: str = "INFO"):
@@ -94,6 +127,11 @@ class DocumentValidator:
             self.logger.info("Using pdfplumber for PDF extraction")
         elif PYPDF2_AVAILABLE:
             self.logger.info("Using PyPDF2 for PDF extraction")
+
+        if PDF2IMAGE_AVAILABLE and PYTESSERACT_AVAILABLE:
+            self.logger.info("OCR support available for scanned PDFs")
+        elif not PDF2IMAGE_AVAILABLE or not PYTESSERACT_AVAILABLE:
+            self.logger.warning("OCR not available. Install pdf2image and pytesseract for scanned PDF support.")
 
     def extract_text_pypdf2(self, pdf_path: str) -> str:
         """Extract text from PDF using PyPDF2."""
@@ -128,10 +166,82 @@ class DocumentValidator:
 
         return text
 
-    def extract_text(self, pdf_path: str) -> str:
+    def extract_text_ocr(self, pdf_path: str, max_pages: int = 10) -> str:
+        """
+        Extract text from image-based/scanned PDF using OCR.
+
+        Args:
+            pdf_path: Path to PDF file
+            max_pages: Maximum number of pages to OCR (default: 10 for better coverage)
+
+        Returns:
+            Extracted text
+        """
+        if not PDF2IMAGE_AVAILABLE or not PYTESSERACT_AVAILABLE:
+            self.logger.warning("OCR libraries not available.")
+            if not PDF2IMAGE_AVAILABLE:
+                self.logger.warning("→ Missing: pdf2image (pip install pdf2image)")
+            if not PYTESSERACT_AVAILABLE:
+                self.logger.warning("→ Missing: pytesseract (pip install pytesseract)")
+            self.logger.warning("→ See OCR_SETUP.md for complete setup instructions")
+            return ""
+
+        text = ""
+        try:
+            self.logger.info(f"Performing OCR on scanned PDF (processing up to {max_pages} pages)...")
+
+            # Convert PDF to images with higher DPI for better quality
+            images = convert_from_path(pdf_path, dpi=300, first_page=1, last_page=max_pages)
+
+            # Perform OCR on each page with enhanced configuration
+            for i, image in enumerate(images):
+                self.logger.info(f"OCR processing page {i+1}/{len(images)}...")
+
+                # Preprocess image for better OCR accuracy
+                # Convert to grayscale and enhance contrast
+                from PIL import ImageEnhance
+                # Convert to grayscale
+                image = image.convert('L')
+                # Enhance contrast
+                enhancer = ImageEnhance.Contrast(image)
+                image = enhancer.enhance(2.0)
+                # Enhance sharpness
+                enhancer = ImageEnhance.Sharpness(image)
+                image = enhancer.enhance(1.5)
+
+                # OCR with custom config for better accuracy
+                custom_config = r'--oem 3 --psm 6'
+                page_text = pytesseract.image_to_string(image, config=custom_config)
+                if page_text:
+                    text += page_text + "\n"
+
+            self.logger.info(f"OCR complete. Extracted {len(text)} characters from {len(images)} pages.")
+
+        except Exception as e:
+            error_msg = str(e)
+            self.logger.error(f"OCR extraction failed: {error_msg}")
+
+            # Provide helpful guidance based on error type
+            if "poppler" in error_msg.lower() or "Unable to get page count" in error_msg:
+                self.logger.error("→ Poppler is not installed or not in PATH")
+                self.logger.error("→ See OCR_SETUP.md for installation instructions")
+            elif "tesseract" in error_msg.lower():
+                self.logger.error("→ Tesseract OCR is not installed or not in PATH")
+                self.logger.error("→ See OCR_SETUP.md for installation instructions")
+            else:
+                self.logger.error("→ Check OCR_SETUP.md for troubleshooting")
+
+        return text
+
+    def extract_text(self, pdf_path: str, use_ocr: bool = True, min_text_threshold: int = 100) -> str:
         """
         Extract text from PDF using available libraries.
-        Tries pdfplumber first, falls back to PyPDF2.
+        Tries pdfplumber first, falls back to PyPDF2, then OCR for scanned PDFs.
+
+        Args:
+            pdf_path: Path to PDF file
+            use_ocr: Whether to use OCR for scanned PDFs (default: True)
+            min_text_threshold: Minimum characters before considering extraction successful (default: 100)
         """
         if not os.path.exists(pdf_path):
             self.logger.error(f"File not found: {pdf_path}")
@@ -140,16 +250,34 @@ class DocumentValidator:
         # Try pdfplumber first (generally better)
         if PDFPLUMBER_AVAILABLE:
             text = self.extract_text_pdfplumber(pdf_path)
-            if text.strip():
+            if len(text.strip()) >= min_text_threshold:
                 return text
 
         # Fallback to PyPDF2
         if PYPDF2_AVAILABLE:
             text = self.extract_text_pypdf2(pdf_path)
-            if text.strip():
+            if len(text.strip()) >= min_text_threshold:
                 return text
 
+        # If we have some text but not enough, it's likely a hybrid or scanned PDF
+        # Final fallback: Try OCR for scanned PDFs
+        if use_ocr and PDF2IMAGE_AVAILABLE and PYTESSERACT_AVAILABLE:
+            self.logger.info("No text found with standard methods, trying OCR...")
+            ocr_text = self.extract_text_ocr(pdf_path)
+            if ocr_text.strip():
+                return ocr_text
+
+        # Could not extract text
         self.logger.warning(f"Could not extract text from {pdf_path}")
+
+        if not PDF2IMAGE_AVAILABLE or not PYTESSERACT_AVAILABLE:
+            self.logger.warning("→ This appears to be a scanned PDF requiring OCR")
+            self.logger.warning("→ Install OCR dependencies: pip install pdf2image pytesseract")
+            self.logger.warning("→ See OCR_SETUP.md for complete setup instructions")
+        else:
+            self.logger.warning("→ OCR libraries are installed but extraction failed")
+            self.logger.warning("→ Check OCR_SETUP.md for troubleshooting (Poppler/Tesseract setup)")
+
         return ""
 
     def detect_signature(self, text: str) -> Dict[str, Any]:
@@ -208,6 +336,94 @@ class DocumentValidator:
             'confidence': confidence,
             'indicator_count': indicator_count,
             'indicators': list(set(found_indicators))[:5]  # Unique, max 5
+        }
+
+    def detect_signatories(self, text: str) -> Dict[str, Any]:
+        """
+        Detect and classify signatories as customer or Spark NZ.
+
+        Returns:
+            dict with customer and spark_nz signature information
+        """
+        text_lower = text.lower()
+        lines = text.split('\n')
+
+        customer_signed = False
+        spark_nz_signed = False
+        customer_info = None
+        spark_nz_info = None
+
+        # Check for customer signature
+        for pattern in self.CUSTOMER_ROLE_PATTERNS:
+            match = re.search(pattern, text_lower, re.IGNORECASE)
+            if match:
+                customer_signed = True
+                # Try to extract name and date near this role
+                for i, line in enumerate(lines):
+                    if re.search(pattern, line.lower(), re.IGNORECASE):
+                        # Look for name in nearby lines (usually name comes before role)
+                        name = None
+                        date = None
+
+                        # Check previous line for name
+                        if i > 0:
+                            potential_name = lines[i-1].strip()
+                            # Name should be 2-50 chars, letters and spaces
+                            if len(potential_name) > 2 and len(potential_name) < 50 and potential_name[0].isupper():
+                                name = potential_name
+
+                        # Check next few lines for date
+                        for j in range(i, min(i+3, len(lines))):
+                            line_dates = self.extract_dates(lines[j])
+                            if line_dates:
+                                date = line_dates[0]
+                                break
+
+                        customer_info = {
+                            'signed': True,
+                            'name': name,
+                            'role': match.group(),
+                            'date': date
+                        }
+                        break
+                break
+
+        # Check for Spark NZ signature
+        for pattern in self.SPARK_NZ_PATTERNS:
+            match = re.search(pattern, text_lower, re.IGNORECASE)
+            if match:
+                spark_nz_signed = True
+                # Try to extract name and date near this role
+                for i, line in enumerate(lines):
+                    if re.search(pattern, line.lower(), re.IGNORECASE):
+                        # Look for name in nearby lines
+                        name = None
+                        date = None
+
+                        if i > 0:
+                            potential_name = lines[i-1].strip()
+                            if len(potential_name) > 2 and len(potential_name) < 50 and potential_name[0].isupper():
+                                name = potential_name
+
+                        for j in range(i, min(i+3, len(lines))):
+                            line_dates = self.extract_dates(lines[j])
+                            if line_dates:
+                                date = line_dates[0]
+                                break
+
+                        spark_nz_info = {
+                            'signed': True,
+                            'name': name,
+                            'role': match.group(),
+                            'date': date
+                        }
+                        break
+                break
+
+        return {
+            'customer': customer_info or {'signed': False, 'name': None, 'role': None, 'date': None},
+            'spark_nz': spark_nz_info or {'signed': False, 'name': None, 'role': None, 'date': None},
+            'both_signed': customer_signed and spark_nz_signed
         }
 
     def extract_dates(self, text: str) -> List[str]:
@@ -330,6 +546,44 @@ class DocumentValidator:
             'matched_pattern': best_match['pattern']
         }
 
+    def extract_pricing(self, text: str) -> Dict[str, Any]:
+        """
+        Extract pricing information from document text.
+
+        Returns:
+            dict with pricing details found in the document
+        """
+        pricing_info = {
+            'has_pricing': False,
+            'amounts': [],
+            'pricing_section_found': False
+        }
+
+        # Check if document has a pricing section
+        if re.search(r'^\s*\d+\.\s*(?:pricing|fees|charges|cost)', text, re.MULTILINE | re.IGNORECASE):
+            pricing_info['pricing_section_found'] = True
+
+        # Extract all monetary amounts
+        price_patterns = [
+            r'\$\s*[\d,]+\.?\d*\s*(?:per|/)\s*(?:connection|month|user|line|year|week|day)',
+            r'\$\s*[\d,]+\.?\d*',
+            r'(?:AUD|NZD|USD|EUR|GBP)\s*[\d,]+\.?\d*',
+        ]
+
+        amounts = []
+        for pattern in price_patterns:
+            matches = re.finditer(pattern, text, re.IGNORECASE)
+            for match in matches:
+                amount = match.group().strip()
+                if amount and amount not in amounts:
+                    amounts.append(amount)
+
+        if amounts:
+            pricing_info['has_pricing'] = True
+            pricing_info['amounts'] = amounts[:10]  # Limit to first 10
+
+        return pricing_info
+
     def validate_document(self, pdf_path: str) -> Dict[str, Any]:
         """
         Perform complete validation and information extraction on a PDF document.
@@ -358,10 +612,12 @@ class DocumentValidator:
 
         # Perform all extractions
         signature_info = self.detect_signature(text)
+        signatories_info = self.detect_signatories(text)
         signing_date = self.extract_signing_date(text)
         customer_name = self.extract_customer_name(text, filename)
         agreement_info = self.detect_agreement_type(text, filename)
         all_dates = self.extract_dates(text)
+        pricing_info = self.extract_pricing(text)
 
         # Compile results
         results = {
@@ -374,11 +630,21 @@ class DocumentValidator:
                 'indicators_found': signature_info['indicator_count'],
                 'signature_indicators': signature_info['indicators']
             },
+            'signatories': {
+                'customer': signatories_info['customer'],
+                'spark_nz': signatories_info['spark_nz'],
+                'both_signed': signatories_info['both_signed']
+            },
             'signing_date': signing_date,
             'customer_name': customer_name,
             'agreement_type': {
                 'type': agreement_info['type'],
                 'confidence': agreement_info['confidence']
+            },
+            'pricing': {
+                'has_pricing': pricing_info['has_pricing'],
+                'pricing_section_found': pricing_info['pricing_section_found'],
+                'amounts': pricing_info['amounts']
             },
             'extracted_dates': all_dates[:10],  # Limit to first 10 dates
             'text_length': len(text),
@@ -431,6 +697,37 @@ class DocumentValidator:
         print(f"Customer Name: {result['customer_name'] or 'Not detected'}")
         print(f"Signed: {'Yes' if result['signature']['is_signed'] else 'No'} ({result['signature']['confidence']} confidence)")
         print(f"Signing Date: {result['signing_date'] or 'Not detected'}")
+
+        # Display detailed signatory information
+        if 'signatories' in result:
+            print(f"\n--- SIGNATORIES ---")
+
+            customer_sig = result['signatories']['customer']
+            if customer_sig['signed']:
+                print(f"Customer Signature: YES")
+                if customer_sig['name']:
+                    print(f"  Name: {customer_sig['name']}")
+                if customer_sig['role']:
+                    print(f"  Role: {customer_sig['role']}")
+                if customer_sig['date']:
+                    print(f"  Date: {customer_sig['date']}")
+            else:
+                print(f"Customer Signature: NO")
+
+            spark_nz_sig = result['signatories']['spark_nz']
+            if spark_nz_sig['signed']:
+                print(f"Spark NZ Signature: YES")
+                if spark_nz_sig['name']:
+                    print(f"  Name: {spark_nz_sig['name']}")
+                if spark_nz_sig['role']:
+                    print(f"  Role: {spark_nz_sig['role']}")
+                if spark_nz_sig['date']:
+                    print(f"  Date: {spark_nz_sig['date']}")
+            else:
+                print(f"Spark NZ Signature: NO")
+
+            if result['signatories']['both_signed']:
+                print(f"\nBoth parties have signed: YES")
 
         if result['signature']['signature_indicators']:
             print(f"\nSignature Indicators Found: {', '.join(result['signature']['signature_indicators'][:3])}")

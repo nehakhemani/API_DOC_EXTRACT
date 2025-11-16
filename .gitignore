@@ -9,6 +9,8 @@ downloaded_pdfs/
 downloads/
 custom_downloads/
 example_downloads/
+input/
+output/
 *.pdf
 *.PDF
 

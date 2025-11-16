@@ -14,9 +14,11 @@ A comprehensive toolkit for downloading files from REST APIs, converting base64 
 
 ### Document Validator
 - **Signature Detection**: Identifies if documents are signed based on keywords and patterns
+- **Signatory Classification**: Separates customer vs company signatures
 - **Date Extraction**: Finds and extracts signing dates from documents
 - **Customer Name Extraction**: Identifies customer/client names from filenames and content
 - **Agreement Type Detection**: Classifies documents by agreement type (Business, NDA, License, etc.)
+- **OCR Support**: Processes scanned/image-based PDFs using Tesseract OCR
 - **Batch Processing**: Validate entire directories of PDFs at once
 - **JSON Export**: Save validation results to structured JSON files
 
@@ -35,7 +37,12 @@ pip install requests
 
 # For document validator
 pip install PyPDF2 pdfplumber
+
+# For OCR support (scanned PDFs)
+pip install pdf2image pytesseract Pillow
 ```
+
+**Note for Scanned PDFs**: If you need to process scanned/image-based PDFs, additional system dependencies are required (Poppler and Tesseract OCR). See **[OCR_SETUP.md](OCR_SETUP.md)** for detailed installation instructions.
 
 ### 2. Create Configuration File
 
@@ -414,7 +421,31 @@ The validator will extract:
 
 ## Troubleshooting
 
-### Authentication Failures
+### Document Validator Issues
+
+#### Cannot Extract Text from Scanned PDF
+If you see: `Could not extract text from PDF` for a scanned document:
+
+1. The PDF is likely image-based and requires OCR
+2. Install OCR dependencies:
+   ```bash
+   pip install pdf2image pytesseract Pillow
+   ```
+3. Install system dependencies (Poppler and Tesseract)
+   - See **[OCR_SETUP.md](OCR_SETUP.md)** for detailed instructions
+4. Common errors:
+   - `Unable to get page count. Is poppler installed` → Install Poppler
+   - `tesseract is not installed` → Install Tesseract OCR
+   - See OCR_SETUP.md for troubleshooting
+
+#### Signature Not Detected
+- Check if document contains signature keywords or role/title indicators
+- For scanned signatures (images), ensure OCR is working properly
+- Verify the document actually contains text (not just images)
+
+### API Downloader Issues
+
+#### Authentication Failures
 - Verify your token/credentials in config
 - Check token hasn't expired
 - Ensure correct authentication type
