@@ -1,8 +1,9 @@
 """
 Batch Document Processor
 
-Processes multiple PDF documents and exports results to CSV and JSON.
+Processes multiple PDF and Word documents and exports results to CSV and JSON.
 Extracts: signatures, dates, pricing, customer names, agreement types, etc.
+Supports: PDF, DOCX
 """
 
 import os
@@ -24,7 +25,7 @@ from document_validator import DocumentValidator
 
 
 class BatchDocumentProcessor:
-    """Process multiple PDF documents and export results."""
+    """Process multiple PDF and Word documents and export results."""
 
     def __init__(self, config_file: str = "batch_config.json"):
         """
@@ -34,7 +35,10 @@ class BatchDocumentProcessor:
             config_file: Path to configuration file
         """
         self.config = self._load_config(config_file)
-        self.validator = DocumentValidator(log_level=self.config.get('log_level', 'INFO'))
+        self.validator = DocumentValidator(
+            log_level=self.config.get('log_level', 'INFO'),
+            use_ocr=self.config.get('use_ocr', False)
+        )
         self.logger = logging.getLogger(__name__)
         self.results = []
 
@@ -45,8 +49,9 @@ class BatchDocumentProcessor:
             'output_folder': 'output',
             'output_formats': ['json', 'csv'],
             'log_level': 'INFO',
+            'use_ocr': False,
             'process_subdirectories': False,
-            'file_patterns': ['*.pdf', '*.PDF']
+            'file_patterns': ['*.pdf', '*.PDF', '*.docx', '*.DOCX']
         }
 
         if not os.path.exists(config_file):
@@ -67,47 +72,47 @@ class BatchDocumentProcessor:
             print("Using default configuration")
             return default_config
 
-    def find_pdf_files(self) -> List[str]:
-        """Find all PDF files in the configured input folder."""
-        pdf_files = set()  # Use set to avoid duplicates
+    def find_documents(self) -> List[str]:
+        """Find all documents (PDF, DOCX) in the configured input folder."""
+        documents = set()  # Use set to avoid duplicates
         input_folder = Path(self.config['input_folder'])
 
         if not input_folder.exists():
             self.logger.error(f"Input folder does not exist: {input_folder}")
             return []
 
-        # Search for PDF files
+        # Search for documents based on file patterns
         if self.config.get('process_subdirectories', False):
             for pattern in self.config['file_patterns']:
-                pdf_files.update(input_folder.rglob(pattern))
+                documents.update(input_folder.rglob(pattern))
         else:
             for pattern in self.config['file_patterns']:
-                pdf_files.update(input_folder.glob(pattern))
+                documents.update(input_folder.glob(pattern))
 
-        return sorted([str(f) for f in pdf_files])
+        return sorted([str(f) for f in documents])
 
     def process_documents(self) -> List[Dict[str, Any]]:
-        """Process all PDF documents in the input folder."""
-        pdf_files = self.find_pdf_files()
+        """Process all documents (PDF, DOCX) in the input folder."""
+        document_files = self.find_documents()
 
-        if not pdf_files:
-            self.logger.warning("No PDF files found to process")
+        if not document_files:
+            self.logger.warning("No documents found to process")
             return []
 
-        self.logger.info(f"Found {len(pdf_files)} PDF files to process")
+        self.logger.info(f"Found {len(document_files)} document(s) to process")
 
         results = []
-        for i, pdf_file in enumerate(pdf_files, 1):
-            self.logger.info(f"Processing {i}/{len(pdf_files)}: {os.path.basename(pdf_file)}")
+        for i, document_file in enumerate(document_files, 1):
+            self.logger.info(f"Processing {i}/{len(document_files)}: {os.path.basename(document_file)}")
 
             try:
-                result = self.validator.validate_document(pdf_file)
+                result = self.validator.validate_document(document_file)
                 results.append(result)
             except Exception as e:
-                self.logger.error(f"Error processing {pdf_file}: {e}")
+                self.logger.error(f"Error processing {document_file}: {e}")
                 results.append({
-                    'filename': os.path.basename(pdf_file),
-                    'file_path': pdf_file,
+                    'filename': os.path.basename(document_file),
+                    'file_path': document_file,
                     'status': 'error',
                     'error': str(e)
                 })
@@ -222,6 +227,9 @@ class BatchDocumentProcessor:
         print(f"Input Folder: {self.config['input_folder']}")
         print(f"Output Folder: {self.config['output_folder']}")
         print(f"Output Formats: {', '.join(self.config['output_formats'])}")
+        print(f"OCR Enabled: {self.config.get('use_ocr', False)}")
+        if not self.config.get('use_ocr', False):
+            print("  (Scanned PDFs will fail - enable OCR or use cloud services)")
         print()
 
         # Process documents

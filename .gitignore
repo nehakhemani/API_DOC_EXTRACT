@@ -4,7 +4,7 @@ config.json
 # Data files - exclude CSV input files
 *.csv
 
-# Downloaded files - exclude download directories and PDFs
+# Downloaded files - exclude download directories and document files
 downloaded_pdfs/
 downloads/
 custom_downloads/
@@ -13,6 +13,10 @@ input/
 output/
 *.pdf
 *.PDF
+*.doc
+*.DOC
+*.docx
+*.DOCX
 
 # Log files - exclude generated logs
 logs/*

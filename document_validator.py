@@ -1,11 +1,14 @@
 """
-PDF Document Validator and Information Extractor
+Document Validator and Information Extractor
 
-Analyzes PDF documents to extract key information such as:
+Analyzes PDF and Word documents to extract key information such as:
 - Signature status
 - Signing date
 - Customer/client name
 - Agreement type
+- Pricing information
+
+Supports: PDF, DOCX, DOC (with OCR for scanned PDFs)
 """
 
 import os
@@ -41,9 +44,15 @@ try:
 except ImportError:
     PYTESSERACT_AVAILABLE = False
 
+try:
+    from docx import Document
+    DOCX_AVAILABLE = True
+except ImportError:
+    DOCX_AVAILABLE = False
+
 
 class DocumentValidator:
-    """Validates and extracts information from PDF documents."""
+    """Validates and extracts information from PDF and Word documents."""
 
     # Common signature indicators
     SIGNATURE_KEYWORDS = [
@@ -107,10 +116,17 @@ class DocumentValidator:
         'Master Agreement': [r'master\s+agreement', r'master\s+service\s+agreement', r'MSA'],
     }
 
-    def __init__(self, log_level: str = "INFO"):
-        """Initialize the document validator."""
+    def __init__(self, log_level: str = "INFO", use_ocr: bool = False):
+        """
+        Initialize the document validator.
+
+        Args:
+            log_level: Logging level (DEBUG, INFO, WARNING, ERROR)
+            use_ocr: Enable OCR for scanned PDFs (requires Tesseract/Poppler installation)
+        """
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(getattr(logging, log_level))
+        self.use_ocr = use_ocr
 
         if not self.logger.handlers:
             handler = logging.StreamHandler()
@@ -120,18 +136,28 @@ class DocumentValidator:
         self._check_dependencies()
 
     def _check_dependencies(self):
-        """Check which PDF libraries are available."""
+        """Check which document libraries are available."""
         if not PYPDF2_AVAILABLE and not PDFPLUMBER_AVAILABLE:
-            self.logger.warning("No PDF libraries available. Install PyPDF2 or pdfplumber for full functionality.")
+            self.logger.warning("No PDF libraries available. Install PyPDF2 or pdfplumber for PDF support.")
         elif PDFPLUMBER_AVAILABLE:
             self.logger.info("Using pdfplumber for PDF extraction")
         elif PYPDF2_AVAILABLE:
             self.logger.info("Using PyPDF2 for PDF extraction")
 
-        if PDF2IMAGE_AVAILABLE and PYTESSERACT_AVAILABLE:
-            self.logger.info("OCR support available for scanned PDFs")
-        elif not PDF2IMAGE_AVAILABLE or not PYTESSERACT_AVAILABLE:
-            self.logger.warning("OCR not available. Install pdf2image and pytesseract for scanned PDF support.")
+        if self.use_ocr:
+            if PDF2IMAGE_AVAILABLE and PYTESSERACT_AVAILABLE:
+                self.logger.info("OCR enabled and available for scanned PDFs")
+            else:
+                self.logger.warning("OCR enabled but libraries not available!")
+                self.logger.warning("Install: pip install pdf2image pytesseract")
+                self.logger.warning("And install Tesseract-OCR and Poppler (see OCR_SETUP.md)")
+        else:
+            self.logger.info("OCR disabled - scanned PDFs will fail with error message")
+
+        if DOCX_AVAILABLE:
+            self.logger.info("Word document support available (.docx)")
+        else:
+            self.logger.warning("Word document support not available. Install python-docx for .docx support.")
 
     def extract_text_pypdf2(self, pdf_path: str) -> str:
         """Extract text from PDF using PyPDF2."""
@@ -233,15 +259,17 @@ class DocumentValidator:
 
         return text
 
-    def extract_text(self, pdf_path: str, use_ocr: bool = True, min_text_threshold: int = 100) -> str:
+    def extract_text(self, pdf_path: str, min_text_threshold: int = 100) -> str:
         """
         Extract text from PDF using available libraries.
-        Tries pdfplumber first, falls back to PyPDF2, then OCR for scanned PDFs.
+        Tries pdfplumber first, falls back to PyPDF2, then OCR if enabled.
 
         Args:
             pdf_path: Path to PDF file
-            use_ocr: Whether to use OCR for scanned PDFs (default: True)
             min_text_threshold: Minimum characters before considering extraction successful (default: 100)
+
+        Returns:
+            Extracted text, or empty string if extraction failed
         """
         if not os.path.exists(pdf_path):
             self.logger.error(f"File not found: {pdf_path}")
@@ -259,26 +287,100 @@ class DocumentValidator:
             if len(text.strip()) >= min_text_threshold:
                 return text
 
-        # If we have some text but not enough, it's likely a hybrid or scanned PDF
-        # Final fallback: Try OCR for scanned PDFs
-        if use_ocr and PDF2IMAGE_AVAILABLE and PYTESSERACT_AVAILABLE:
-            self.logger.info("No text found with standard methods, trying OCR...")
-            ocr_text = self.extract_text_ocr(pdf_path)
-            if ocr_text.strip():
-                return ocr_text
-
-        # Could not extract text
-        self.logger.warning(f"Could not extract text from {pdf_path}")
-
-        if not PDF2IMAGE_AVAILABLE or not PYTESSERACT_AVAILABLE:
-            self.logger.warning("→ This appears to be a scanned PDF requiring OCR")
-            self.logger.warning("→ Install OCR dependencies: pip install pdf2image pytesseract")
-            self.logger.warning("→ See OCR_SETUP.md for complete setup instructions")
+        # If we have some text but not enough, it's likely a scanned/image-based PDF
+        # Check if OCR is enabled
+        if self.use_ocr:
+            if PDF2IMAGE_AVAILABLE and PYTESSERACT_AVAILABLE:
+                self.logger.info("Insufficient text extracted, trying OCR...")
+                ocr_text = self.extract_text_ocr(pdf_path)
+                if ocr_text.strip():
+                    return ocr_text
+            else:
+                self.logger.error("OCR enabled but libraries not installed!")
+                self.logger.error("→ Install: pip install pdf2image pytesseract")
+                self.logger.error("→ System requirements: Tesseract-OCR and Poppler")
+                self.logger.error("→ See OCR_SETUP.md for installation instructions")
+                return ""
         else:
-            self.logger.warning("→ OCR libraries are installed but extraction failed")
-            self.logger.warning("→ Check OCR_SETUP.md for troubleshooting (Poppler/Tesseract setup)")
+            # OCR is disabled but document appears to be scanned
+            extracted_chars = len(text.strip()) if 'text' in locals() else 0
+            self.logger.error(f"Document appears to be scanned/image-based (only {extracted_chars} characters extracted)")
+            self.logger.error("→ This document requires OCR processing")
+            self.logger.error("→ Enable OCR in batch_config.json: \"use_ocr\": true")
+            self.logger.error("→ Alternative: Use cloud-based OCR services (Azure AI Document Intelligence, AWS Textract, Google Cloud Vision)")
+            return ""
 
         return ""
+
+    def extract_text_docx(self, docx_path: str) -> str:
+        """
+        Extract text from DOCX file.
+
+        Args:
+            docx_path: Path to DOCX file
+
+        Returns:
+            Extracted text
+        """
+        if not DOCX_AVAILABLE:
+            self.logger.warning("python-docx not available. Install with: pip install python-docx")
+            return ""
+
+        text = ""
+        try:
+            doc = Document(docx_path)
+
+            # Extract text from paragraphs
+            for paragraph in doc.paragraphs:
+                text += paragraph.text + "\n"
+
+            # Extract text from tables
+            for table in doc.tables:
+                for row in table.rows:
+                    for cell in row.cells:
+                        text += cell.text + " "
+                    text += "\n"
+
+            self.logger.info(f"Extracted {len(text)} characters from DOCX")
+
+        except Exception as e:
+            self.logger.error(f"DOCX extraction failed: {e}")
+
+        return text
+
+    def extract_text_from_document(self, file_path: str) -> str:
+        """
+        Extract text from any supported document format (PDF, DOCX, DOC).
+
+        Args:
+            file_path: Path to document file
+
+        Returns:
+            Extracted text
+        """
+        if not os.path.exists(file_path):
+            self.logger.error(f"File not found: {file_path}")
+            return ""
+
+        file_ext = Path(file_path).suffix.lower()
+
+        # Handle Word documents
+        if file_ext in ['.docx', '.doc']:
+            if file_ext == '.docx':
+                return self.extract_text_docx(file_path)
+            elif file_ext == '.doc':
+                self.logger.warning(".doc files (old Word format) are not directly supported.")
+                self.logger.warning("Please convert to .docx or save as .docx format.")
+                return ""
+
+        # Handle PDF documents
+        elif file_ext == '.pdf':
+            return self.extract_text(file_path)
+
+        else:
+            self.logger.error(f"Unsupported file format: {file_ext}")
+            self.logger.error("Supported formats: .pdf, .docx")
+            return ""
 
     def detect_signature(self, text: str) -> Dict[str, Any]:
         """
@@ -584,30 +686,31 @@ class DocumentValidator:
 
         return pricing_info
 
-    def validate_document(self, pdf_path: str) -> Dict[str, Any]:
+    def validate_document(self, file_path: str) -> Dict[str, Any]:
         """
-        Perform complete validation and information extraction on a PDF document.
+        Perform complete validation and information extraction on a document.
 
         Args:
-            pdf_path: Path to the PDF file
+            file_path: Path to the document file (PDF, DOCX)
 
         Returns:
             Dictionary containing all extracted information
         """
-        self.logger.info(f"Validating document: {pdf_path}")
+        self.logger.info(f"Validating document: {file_path}")
 
-        # Get filename
-        filename = os.path.basename(pdf_path)
+        # Get filename and file type
+        filename = os.path.basename(file_path)
+        file_ext = Path(file_path).suffix.lower()
 
-        # Extract text
-        text = self.extract_text(pdf_path)
+        # Extract text based on file type
+        text = self.extract_text_from_document(file_path)
 
         if not text.strip():
             return {
                 'filename': filename,
                 'status': 'error',
-                'error': 'Could not extract text from PDF',
-                'file_path': pdf_path
+                'error': f'Could not extract text from {file_ext} file',
+                'file_path': file_path
             }
 
         # Perform all extractions
@@ -622,7 +725,7 @@ class DocumentValidator:
         # Compile results
         results = {
             'filename': filename,
-            'file_path': pdf_path,
+            'file_path': file_path,
             'status': 'success',
             'signature': {
                 'is_signed': signature_info['is_signed'],

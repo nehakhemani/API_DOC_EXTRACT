@@ -3,6 +3,7 @@
   "output_folder": "output",
   "output_formats": ["json", "csv"],
   "log_level": "INFO",
+  "use_ocr": false,
   "process_subdirectories": false,
-  "file_patterns": ["*.pdf", "*.PDF"]
+  "file_patterns": ["*.pdf", "*.PDF", "*.docx", "*.DOCX"]
 }

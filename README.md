@@ -14,13 +14,15 @@ A comprehensive toolkit for downloading files from REST APIs, converting base64 
 
 ### Document Validator
 - **Signature Detection**: Identifies if documents are signed based on keywords and patterns
-- **Signatory Classification**: Separates customer vs company signatures
+- **Signatory Classification**: Separates customer vs Spark NZ signatures
 - **Date Extraction**: Finds and extracts signing dates from documents
 - **Customer Name Extraction**: Identifies customer/client names from filenames and content
-- **Agreement Type Detection**: Classifies documents by agreement type (Business, NDA, License, etc.)
-- **OCR Support**: Processes scanned/image-based PDFs using Tesseract OCR
-- **Batch Processing**: Validate entire directories of PDFs at once
-- **JSON Export**: Save validation results to structured JSON files
+- **Agreement Type Detection**: Classifies documents (Variation, Statement of Work, Letter of Engagement, Service Schedule, etc.)
+- **Pricing Extraction**: Finds and extracts pricing information from agreements
+- **Multi-Format Support**: PDF and DOCX documents
+- **OCR Support** (Optional): Processes scanned/image-based PDFs - disabled by default
+- **Batch Processing**: Validate entire directories of documents at once
+- **Export Formats**: JSON and CSV export of validation results
 
 ## Quick Start
 
@@ -42,7 +44,11 @@ pip install PyPDF2 pdfplumber
 pip install pdf2image pytesseract Pillow
 ```
 
-**Note for Scanned PDFs**: If you need to process scanned/image-based PDFs, additional system dependencies are required (Poppler and Tesseract OCR). See **[OCR_SETUP.md](OCR_SETUP.md)** for detailed installation instructions.
+**Note for Scanned PDFs**:
+- OCR is **disabled by default** to work in corporate environments
+- Standard PDF/DOCX extraction works without any additional setup
+- For scanned/image-based PDFs, see **[OCR_ALTERNATIVES.md](OCR_ALTERNATIVES.md)** for cloud-based solutions
+- Or enable local OCR (requires Poppler/Tesseract): See **[OCR_SETUP.md](OCR_SETUP.md)**
 
 ### 2. Create Configuration File
 
@@ -480,17 +486,58 @@ Install all dependencies:
 pip install -r requirements.txt
 ```
 
+## Batch Document Processing
+
+### Configuration
+
+Create or edit `batch_config.json`:
+
+```json
+{
+  "input_folder": "input",
+  "output_folder": "output",
+  "output_formats": ["json", "csv"],
+  "log_level": "INFO",
+  "use_ocr": false,
+  "process_subdirectories": false,
+  "file_patterns": ["*.pdf", "*.PDF", "*.docx", "*.DOCX"]
+}
+```
+
+**Key Setting - `use_ocr`:**
+- `false` (default): OCR disabled - works in corporate environments, scanned PDFs will fail with error
+- `true`: OCR enabled - requires Tesseract/Poppler installation (see OCR_SETUP.md)
+- For scanned PDFs in restricted environments: See **[OCR_ALTERNATIVES.md](OCR_ALTERNATIVES.md)** for cloud solutions
+
+### Running
+
+```bash
+python batch_processor.py
+```
+
+### Output
+
+Results saved as:
+- `output/document_analysis_YYYYMMDD_HHMMSS.json`
+- `output/document_analysis_YYYYMMDD_HHMMSS.csv`
+
 ## File Structure
 
 ```
 PDF_CCL/
 ├── api_downloader.py          # API file downloader
-├── document_validator.py      # PDF document validator
-├── config.json                # Your configuration (create from example)
+├── batch_processor.py         # Batch document processor
+├── document_validator.py      # Document validator (PDF/DOCX)
+├── config.json                # API configuration (create from example)
+├── batch_config.json          # Batch processing configuration
 ├── config.example.json        # Configuration template
 ├── requirements.txt           # Python dependencies
 ├── README.md                  # This file
-├── downloads/                 # Downloaded PDFs (created automatically)
+├── OCR_SETUP.md               # Local OCR installation guide
+├── OCR_ALTERNATIVES.md        # Cloud OCR alternatives
+├── downloads/                 # Downloaded files (created automatically)
+├── input/                     # Documents to process (create manually)
+├── output/                    # Processing results (created automatically)
 └── logs/                      # Log files (created automatically)
 ```
 
